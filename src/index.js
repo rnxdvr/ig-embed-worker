@@ -280,19 +280,19 @@ function generatorPage(origin, state = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Instagram/Reels Embed Generator</title>
-  <meta name="description" content="Генератор embed-ссылок для Instagram/Reels. Клоун, когда ты мне за это будешь платить?">
+  <meta name="description" content="Генератор embed-ссылок для Instagram/Reels">
   <style>${pageCss()}${generatorCss()}</style>
 </head>
 <body>
   <main class="shell">
     <section class="panel">
       <h1>Instagram/Reels Embed Generator</h1>
-      <p class="lead">Вставь ссылку на обосратый Reel или обоссатый Post — получишь embed-ссылку и iframe-код.</p>
+      <p class="lead">Вставь ссылку на обосратый Reel или обоссатый Post — получишь embed-ссылку и iframe-код. Клоун, когда ты мне за это будешь платить?</p>
 
       <form method="get" action="/make" autocomplete="off">
         <label for="src">Ссылка Instagram / kkinstagram</label>
         <input id="src" name="u" value="${escapeAttr(input)}" inputmode="url" placeholder="https://www.instagram.com/reel/.../">
-        <button class="primary" type="submit">Сделать ссылку</button>
+        <button class="primary" type="submit">Сделать ссылку и задонать мне уже, епта</button>
         ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
       </form>
 
