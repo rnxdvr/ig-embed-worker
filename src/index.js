@@ -109,6 +109,10 @@ async function getMetadata(input, request, ctx) {
   const rawDescription = cleanText(og.description || 'Preview для Instagram-ссылки.');
   const author = parseAuthor(rawTitle, rawDescription) || info.username || 'Instagram';
   const image = absoluteImage(og.image, info.canonicalUrl) || `${origin}/fallback.jpg`;
+  const video = absoluteUrl(og.video, info.canonicalUrl);
+  const videoType = cleanText(og.videoType || guessVideoType(video));
+  const videoWidth = cleanNumber(og.videoWidth) || 720;
+  const videoHeight = cleanNumber(og.videoHeight) || 1280;
 
   const meta = {
     ok: true,
@@ -121,7 +125,11 @@ async function getMetadata(input, request, ctx) {
     title: rawTitle,
     description: rawDescription,
     image,
-    fetched: Boolean(og.title || og.description || og.image),
+    video,
+    videoType,
+    videoWidth,
+    videoHeight,
+    fetched: Boolean(og.title || og.description || og.image || og.video),
     fetchError
   };
 
@@ -158,6 +166,10 @@ function parseMeta(htmlText) {
     if (key === 'og:title' || key === 'twitter:title') out.title ||= decodeEntities(val);
     if (key === 'og:description' || key === 'twitter:description' || key === 'description') out.description ||= decodeEntities(val);
     if (key === 'og:image' || key === 'twitter:image') out.image ||= decodeEntities(val);
+    if (key === 'og:video' || key === 'og:video:url' || key === 'og:video:secure_url' || key === 'twitter:player:stream') out.video ||= decodeEntities(val);
+    if (key === 'og:video:type' || key === 'twitter:player:stream:content_type') out.videoType ||= decodeEntities(val);
+    if (key === 'og:video:width') out.videoWidth ||= decodeEntities(val);
+    if (key === 'og:video:height') out.videoHeight ||= decodeEntities(val);
   }
 
   const title = htmlText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
@@ -224,6 +236,19 @@ function embedPage(meta, selfUrl, origin) {
   const description = meta.description || 'Preview для Instagram-ссылки.';
   const author = meta.author || 'Instagram';
   const badge = meta.type === 'reel' ? 'Instagram Reel' : (meta.type === 'tv' ? 'Instagram Video' : 'Instagram Post');
+  const hasVideo = Boolean(meta.video);
+  const videoTags = hasVideo ? `
+  <meta property="og:video" content="${escapeAttr(meta.video)}">
+  <meta property="og:video:secure_url" content="${escapeAttr(meta.video)}">
+  <meta property="og:video:type" content="${escapeAttr(meta.videoType || 'video/mp4')}">
+  <meta property="og:video:width" content="${escapeAttr(String(meta.videoWidth || 720))}">
+  <meta property="og:video:height" content="${escapeAttr(String(meta.videoHeight || 1280))}">
+  <meta name="twitter:card" content="player">
+  <meta name="twitter:player" content="${escapeAttr(selfUrl)}">
+  <meta name="twitter:player:width" content="${escapeAttr(String(meta.videoWidth || 720))}">
+  <meta name="twitter:player:height" content="${escapeAttr(String(meta.videoHeight || 1280))}">
+  <meta name="twitter:player:stream" content="${escapeAttr(meta.video)}">
+  <meta name="twitter:player:stream:content_type" content="${escapeAttr(meta.videoType || 'video/mp4')}">` : '';
 
   return `<!doctype html>
 <html lang="ru">
@@ -232,15 +257,15 @@ function embedPage(meta, selfUrl, origin) {
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeAttr(description)}">
-  <meta property="og:type" content="article">
+  <meta property="og:type" content="${hasVideo ? 'video.other' : 'article'}">
   <meta property="og:site_name" content="${escapeAttr(APP_NAME)}">
   <meta property="og:url" content="${escapeAttr(selfUrl)}">
   <meta property="og:title" content="${escapeAttr(title)}">
   <meta property="og:description" content="${escapeAttr(description)}">
   <meta property="og:image" content="${escapeAttr(image)}">
   <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image:height" content="630">${videoTags}
+  ${hasVideo ? '' : '<meta name="twitter:card" content="summary_large_image">'}
   <meta name="twitter:title" content="${escapeAttr(title)}">
   <meta name="twitter:description" content="${escapeAttr(description)}">
   <meta name="twitter:image" content="${escapeAttr(image)}">
@@ -280,7 +305,7 @@ function generatorPage(origin, state = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Instagram/Reels Embed Generator</title>
-  <meta name="description" content="Генератор embed-ссылок для Instagram/Reels">
+  <meta name="description" content="Генератор embed-ссылок для Instagram/Reels.">
   <style>${pageCss()}${generatorCss()}</style>
 </head>
 <body>
@@ -292,7 +317,7 @@ function generatorPage(origin, state = {}) {
       <form method="get" action="/make" autocomplete="off">
         <label for="src">Ссылка Instagram / kkinstagram</label>
         <input id="src" name="u" value="${escapeAttr(input)}" inputmode="url" placeholder="https://www.instagram.com/reel/.../">
-        <button class="primary" type="submit">Сделать ссылку и задонать мне уже, епта</button>
+        <button class="primary" type="submit">Сделай ссылку и задонать мне уже, епта</button>
         ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
       </form>
 
@@ -396,6 +421,31 @@ function decodeFromPath(s) {
 function absoluteImage(src, base) {
   if (!src) return '';
   try { return new URL(src, base).toString(); } catch { return ''; }
+}
+
+function absoluteUrl(src, base) {
+  if (!src) return '';
+  try {
+    const u = new URL(src, base);
+    if (!['http:', 'https:'].includes(u.protocol)) return '';
+    return u.toString();
+  } catch {
+    return '';
+  }
+}
+
+function guessVideoType(url) {
+  if (!url) return '';
+  const path = (() => { try { return new URL(url).pathname.toLowerCase(); } catch { return ''; } })();
+  if (path.endsWith('.webm')) return 'video/webm';
+  if (path.endsWith('.mov')) return 'video/quicktime';
+  if (path.endsWith('.m4v') || path.endsWith('.mp4')) return 'video/mp4';
+  return 'video/mp4';
+}
+
+function cleanNumber(n) {
+  const x = parseInt(String(n || '').replace(/[^0-9]/g, ''), 10);
+  return Number.isFinite(x) && x > 0 ? x : 0;
 }
 
 function cleanText(s) {
